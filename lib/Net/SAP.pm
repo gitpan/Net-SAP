@@ -2,178 +2,167 @@ package Net::SAP;
 
 ################
 #
-# SAP: Session Announcement Protocol (rfc2974) Packet parser
+# SAP: Session Announcement Protocol (rfc2974)
 #
 # Nicholas Humfrey
 # njh@ecs.soton.ac.uk
 #
-#
-# port 9875
-#
-# groups
-# v4           : 224.2.127.254
-# v6 Node-local: FF01::2:7FFE
-# v6 Link-local: FF02::2:7FFE
-# v6 Site-local: FF05::2:7FFE
-# v6  Org-local: FF08::2:7FFE
-# v6     Global: FF0E::2:7FFE
-#
 
 use strict;
-use IO::Socket::Multicast;
-use Compress::Zlib;
-use vars qw/$VERSION/;
+use XSLoader;
+use Carp;
 
-$VERSION="0.04";
+use Net::SAP::Packet;
+
+use vars qw/$VERSION $PORT/;
+
+$VERSION="0.06";
+$PORT=9875;
+
+
+
+# User friendly names for multicast groups
+my %groups = (
+	'ipv4'=>		'224.2.127.254',
+	'ipv4-global'=>	'224.2.127.254',
+	'ipv6-node'=>	'FF01::2:7FFE',
+	'ipv6-link'=>	'FF02::2:7FFE',
+	'ipv6-site'=>	'FF05::2:7FFE',
+	'ipv6-org'=>	'FF08::2:7FFE',
+	'ipv6-global'=>	'FF0E::2:7FFE',
+);
+	
+
+XSLoader::load('Net::SAP', $VERSION);
 
 
 
 sub new {
     my $class = shift;
+    my ($group) = @_;
+    
+    
+	# Work out the multicast group to use
+    croak "Missing group parameter" unless defined $group;
+    if (exists $groups{$group}) {
+    	$group = $groups{$group};
+    }
+
+
+	# Store parameters
     my $self = {
-    	'group'	=> '224.2.127.254',
-    	'port'	=> 9875,
-    	'proto'	=> 'udp',
+    	'group'	=> $group,
+    	'port'	=> $PORT,
+    	'hops'	=> 127,
     };
     
     
-    # Create the multicast socket
-    my $sock = IO::Socket::Multicast->new(
-    		Proto => $self->{'proto'},
-    		LocalPort => $self->{'port'});
-    if (!defined $sock) {
-    	warn "Failed to create multicast socket: $!";
-    	return undef;
-    }
-
+    # Create Multicast Socket using C code
+    $self->{'sock'} = _xs_socket_create(
+    	$self->{'group'},
+    	$self->{'port'},
+    	$self->{'hops'},
+    );
+    return undef unless (defined $self->{'sock'});
     
-	# Join the SAP multicast group
-	if (!$sock->mcast_add( $self->{'group'} ) )
-	{
-		warn "Failed to join multicast group: $!";
-		return undef;
-	}
+    
+    # Store the Socket family we ended up using
+    $self->{'family'} = _xs_socket_family( $self->{'sock'} );
+    
 
-	
-    $self->{'sock'} = $sock;
-	bless $self, $class;
+    bless $self, $class;
 	return $self;
+}
+
+
+#
+# Returns the multicast group the socket is bound to
+#
+sub group {
+	my $self = shift;
+	return $self->{'group'};
 }
 
 #
 # Blocks until a valid SAP packet is received
 #
-#
 sub receive {
-	my ($self) = @_;
+	my $self = shift;
 	my $sap_packet = undef;
 	
-	while (!defined $sap_packet) {
-		my $data;
+	
+	while(!defined $sap_packet) {
+	
+		# Recieve a packet	
+		my $packet = _xs_socket_recv( $self->{'sock'} );
+		next unless (defined $packet);
+		next unless (exists $packet->{'data'});
 		
-		# rfc2327 says the max size of an SDP file is 1k
-		next unless $self->{'sock'}->recv($data,2048);
+		# Create new packet object from the data we recieved
+		$sap_packet = new Net::SAP::Packet( $packet->{'data'} );
+		next unless (defined $sap_packet);
 		
-		# Try and parse the packet
-		$sap_packet = $self->_parse_sap_packet( $data );
-	}
-	
-	return $sap_packet;
-}
-
-#
-# Not intended for consumption outside this module !
-#
-sub _parse_sap_packet {
-	my ($self, $packet) = @_;
-	my $sap= {};
-	my $pos=0;
-	
-	# grab the first 32bits of the packet
-	my ($vartec, $auth_len, $id_hash) = unpack("CCn",substr($packet,$pos,4)); $pos+=4;
-	
- 	$sap->{'v'} = (($vartec & 0xE0) >> 5);	# Version (1)
- 	$sap->{'a'} = (($vartec & 0x10) >> 4);	# Address type (0=v4, 1=v6)
-# 	$sap->{'r'} = (($vartec & 0x08) >> 3);	# Reserved
- 	$sap->{'t'} = (($vartec & 0x04) >> 2);	# Message Type (0=announce, 1=delete)
- 	$sap->{'e'} = (($vartec & 0x02) >> 1);	# Encryped (0=no, 1=yes)
- 	$sap->{'c'} = (($vartec & 0x01) >> 0);	# Compressed (0=no, 1=yes)
- 	
- 	# Show warning if unsupported SAP packet version
- 	if ($sap->{'v'} != 0 and $sap->{'v'} != 1) {
- 		warn "Unsupported SAP packet version: $sap->{'v'}.\n";
- 		return undef;
- 	}
- 	
-	
- 	$sap->{'auth_len'} = $auth_len;
- 	$sap->{'msg_id_hash'} = sprintf("%6.6d", $id_hash);
-# 	$sap->{'msg_id_hash'} = sprintf("0x%4.4X", $id_hash);
- 	
- 	if ($sap->{'a'} == 0) {
- 		# IPv4 address
- 		$sap->{'origin_ip'} = sprintf("%d.%d.%d.%d", unpack("CCCC", substr($packet,$pos,4))); $pos+=4;
- 	} else {
- 		# IPv6 address
- 		warn "Net::SAP doesn't currently support IPv6.\n";
- 		return undef;
- 	}
- 	
- 	
- 	# Get authentication data if it exists
- 	if ($sap->{'auth_len'}) {
- 		$sap->{'auth_data'} = substr($packet,$pos,$sap->{'auth_len'});
- 		$pos+=$sap->{'auth_len'};
- 		warn "Net::SAP doesn't currently support encrypted SAP packets.\n";
- 		return undef;
- 	}
- 	
- 	
- 	# Decompress the payload with zlib
- 	my $payload = substr($packet,$pos);
-	if ($sap->{'c'}) {
-		my $inf = inflateInit();
-		unless (defined $inf) {
-			warn "Failed to initalise zlib to decompress SAP packet";
-			return undef;
-		} else {
-			$payload = $inf->inflate( $payload );
-			unless (defined $payload) {
-				warn "Failed to decompress SAP packet";
-				return undef;
-			}
+		# Correct the origin on Stupid packets !
+		if ($sap_packet->origin_address() eq '0.0.0.0' or
+			$sap_packet->origin_address() eq '1.2.3.4' )
+		{
+			$sap_packet->origin_address( $packet->{'from'} );
 		}
 	}
 
-
- 	# Check the next three bytes, to see if it is the start of an SDP file
- 	if ($payload =~ /^v=\d+/) {
-  		$sap->{'payload_type'} = 'application/sdp';
- 		$sap->{'payload'} = $payload;
-	} else {
-		my $index = index($payload, "\x00");
-		if ($index==-1) {
-			$sap->{'payload_type'} = "unknown";
-			$sap->{'payload'} = $payload;
-		} else {
-			$sap->{'payload_type'} = substr( $payload, 0, $index );
-			$sap->{'payload'} = substr( $payload, $index+1 );
- 		}
- 	}
-
-	return $sap;
+	return $sap_packet;
 }
 
+
+sub send {
+	my $self = shift;
+	my ($packet) = @_;
+	
+	croak "Missing data to send." unless defined $packet;
+
+
+	# If it isn't a packet object, turn it into one	
+	if (ref $packet eq 'Net::SDP') {
+		my $data = $packet->generate();
+		$packet = new Net::SAP::Packet();
+		$packet->payload( $data );
+	}
+	elsif (ref $packet ne 'Net::SAP::Packet') {
+		my $data = $packet;
+		$packet = new Net::SAP::Packet();
+		$packet->payload( $data );
+	}
+
+
+	# Set the origin address, if there isn't one set
+	if ($packet->origin_address() eq '') {
+	
+		$packet->origin_address_type( $self->{'family'} );
+	
+		$packet->origin_address( 
+			_xs_origin_addr( $self->{'family'} )
+		);
+	}
+	
+	# Assemble and send the packet
+	my $data = $packet->generate();
+	if (!defined $data) {
+		warn "Failed to create binary packet.";
+		return -1;
+	} elsif (length $data > 1024) {
+		warn "Packet is more than 1024 bytes, not sending.";
+		return -1;
+	} else {
+		return _xs_socket_send( $self->{'sock'}, $data );
+	}
+}
 
 
 sub close {
 	my $self=shift;
 	
-	# Leave the SAP multicast group
-	$self->{'sock'}->mcast_drop( $self->{'group'} );
-	
-	# Close the socket
-	$self->{'sock'}->close();
+	# Close the multicast socket
+	_xs_socket_close( $self->{'sock'} );
 	
 	undef $self->{'sock'};
 }
@@ -196,13 +185,13 @@ __END__
 
 =head1 NAME
 
-Net::SAP - Session Announcement Protocol (rfc2974) packet parser
+Net::SAP - Session Announcement Protocol (rfc2974)
 
 =head1 SYNOPSIS
 
   use Net::SAP;
 
-  my $sap = Net::SAP->new();
+  my $sap = Net::SAP->new( 'ipv6-global' );
 
   my $packet = $sap->receive();
 
@@ -211,58 +200,56 @@ Net::SAP - Session Announcement Protocol (rfc2974) packet parser
 
 =head1 DESCRIPTION
 
-Net::SAP currently provides basic functionality for receiving and parsing
-SAP (RFC2974) multicast packets.
-
-=head2 CONSTRUCTORS
-
-=over 4
-
-=item $sap = Net::SAP->new()
-
-The new() method is the constructor for the Net::SAP class.
-When you create a Net::SAP object, it automatically joins
-the SAP multicast group, ready to start receiving packets.
-
-=back
+Net::SAP allows receiving and sending of SAP (RFC2974) 
+multicast packets over IPv4 and IPv6.
 
 =head2 METHODS
 
 =over 4
 
+=item $sap = Net::SAP->new( $group )
+
+The new() method is the constructor for the C<Net::SAP> class.
+You must specify the SAP multicast group you want to join:
+
+	ipv4
+	ipv6-node
+	ipv6-link
+	ipv6-site
+	ipv6-org
+	ipv6-global
+
+Alternatively you may pass the address of the multicast group 
+directly. When the C<Net::SAP> object is created, it joins the 
+multicast group, ready to start receiving or sending packets.
+
+
 =item $packet = $sap->receive()
 
 This method blocks until a valid SAP packet has been received.
-The packet is parsed, decompressed and returned as a hashref:
+The packet is parsed, decompressed and returned as a 
+C<Net::SAP::Packet> object.
 
- {
-    'a' => 0,	# 0 is origin address is IPv4
-    		# 1 if the address IPv6
-    'c' => 0,	# 1 if packet was compressed
-    'e' => 0,	# 1 if packet was encrypted
-    't' => 0,	# 0 if this is an advertizement
-    		# 1 for session deletion
-    'v' => 1,	# SAP Packet format version number
 
-    # Message ID Hash as an integer
-    'msg_id_hash' => 1287,
+=item $sap->send( $data )
 
-    # Length of the authentication data
-    'auth_len' => 0,	
+This method sends out SAP packet on the multicast group that the
+C<Net::SAP> object to bound to. The $data parameter can either be 
+a C<Net::SAP::Packet> object, a C<Net::SDP> object or raw SDP data.
 
-    # The authentication data as binary
-    'auth_data' => '',
+Passing a C<Net::SAP::Packet> object gives the greatest control 
+over what is sent. Otherwise default values will be used.
 
-    # IP the announcement originated from
-    'origin_ip' => '152.78.104.83',	
+If no origin_address has been set, then it is set to the IP address 
+of the first network interface.
 
-    # MIME type of the payload
-    'payload_type' => 'application/sdp',
+Packets greater than 1024 bytes will not be sent. This method 
+returns 0 if packet was sent successfully.
 
-    # The payload - usually an SDP file
-    'payload' => '',
 
- };
+=item $group = $sap->group()
+
+Returns the address of the multicast group that the socket is bound to.
 
 
 =item $sap->close()
@@ -275,25 +262,30 @@ Leave the SAP multicast group and close the socket.
 
 =over
 
-=item Add IPv6 support
+=item add method of choosing the multicast interface to use
+
+=item ensure that only public v4 addresses are used as origin
 
 =item Packet decryption and validation
 
-=item Add support for creating and sending packets.
+=item Improve test script ?
 
-=item Improve test script
-
-=item Return perl object (Net::SAP::Packet ?) instead of hash ?
-
-=item Better documentation ?
+=item Move some XS functions to Net::SAP::Packet ?
 
 =back
 
 =head1 SEE ALSO
 
-perl(1), IO::Socket::Multicast(3)
+L<Net::SAP::Packet>, L<Net::SDP>, perl(1)
 
-http://www.ietf.org/rfc/rfc2974.txt
+L<http://www.ietf.org/rfc/rfc2974.txt>
+
+=head1 BUGS
+
+Please report any bugs or feature requests to
+C<bug-net-sap@rt.cpan.org>, or through the web interface at
+L<http://rt.cpan.org>.  I will be notified, and then you will automatically
+be notified of progress on your bug as I make changes.
 
 =head1 AUTHOR
 

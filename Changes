@@ -1,5 +1,13 @@
 Revision history for Perl extension Net::SAP.
 
+0.06  Sun Nov  7 15:52:51 2004
+	Added IPv6 support by adding XS/C code
+	Added support for creating and sending packets
+
+0.05  Wed Sep  8 19:31:52 2004
+	Added Net::SAP::Packet
+	(undocumented and unreleased)
+
 0.04  Tue Aug 17 13:00:07 2004
 	Changed to the Module::Build system
 

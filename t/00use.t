@@ -19,9 +19,9 @@ ok(1);
 
 
 # Now try creating a new Net::SAP object
-my $sap = Net::SAP->new();
+my $sap = Net::SAP->new('ipv4');
 
-ok( defined $sap );
+ok( $sap );
 
 
 

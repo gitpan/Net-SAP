@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 #
 # This example script reads packets
-# and prints the hashref of the packets
+# and prints the contents of the packets 
 # using Data::Dumper.
 #
 
@@ -10,7 +10,8 @@ use Data::Dumper;
 use strict;
 
 
-my $sap = Net::SAP->new();
+my $sap = Net::SAP->new( 'ipv6-global' );
+die "Failed to create Net::SAP" unless ($sap);
 
 while(1) {
 	my $packet = $sap->receive();

@@ -1,20 +1,24 @@
 --- #YAML:1.0
 name: Net-SAP
-version: 0.04
+version: 0.06
 author:
   - Nicholas Humfrey, njh@ecs.soton.ac.uk
-abstract: |-
-  Session Announcement Protocol (rfc2974) packet parser
+abstract: Session Announcement Protocol (rfc2974)
 license: perl
 requires:
   Compress::Zlib: 1.14
-  IO::Socket::Multicast: 0.20
+  Data::Dumper: 0
+  Getopt::Std: 0
+  Pod::Usage: 0
   Test: 1.00
   perl: 5.5.0
 build_requires:
-  Module::Build: 0.25
+  Module::Build: 0.20
 provides:
   Net::SAP:
     file: lib/Net/SAP.pm
-    version: 0.04
-generated_by: Module::Build version 0.25
+    version: 0.06
+  Net::SAP::Packet:
+    file: lib/Net/SAP/Packet.pm
+    version: 0.06
+generated_by: Module::Build version 0.26
