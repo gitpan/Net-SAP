@@ -4,6 +4,7 @@ package Net::SAP;
 #
 # SAP: Session Announcement Protocol (rfc2974) Packet parser
 #
+# Nicholas Humfrey
 # njh@ecs.soton.ac.uk
 #
 #
@@ -23,7 +24,7 @@ use IO::Socket::Multicast;
 use Compress::Zlib;
 use vars qw/$VERSION/;
 
-$VERSION="0.01";
+$VERSION="0.02";
 
 
 
@@ -208,9 +209,9 @@ SAP (RFC2974) multicast packets.
 
 =item $sap = Net::SAP->new()
 
-The new() method is the constructor for the IO::Socket::Multicast
-class. When you create a Net::SAP object, it automatically joins
-the SAP multicast group, ready to start reading packets.
+The new() method is the constructor for the Net::SAP class.
+When you create a Net::SAP object, it automatically joins
+the SAP multicast group, ready to start receiving packets.
 
 =back
 
@@ -280,6 +281,8 @@ Leave the SAP multicast group and close the socket.
 =head1 SEE ALSO
 
 perl(1), IO::Socket::Multicast(3)
+
+http://www.ietf.org/rfc/rfc2974.txt
 
 =head1 AUTHOR
 
