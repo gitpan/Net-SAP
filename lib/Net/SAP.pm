@@ -24,7 +24,7 @@ use IO::Socket::Multicast;
 use Compress::Zlib;
 use vars qw/$VERSION/;
 
-$VERSION="0.02";
+$VERSION="0.03";
 
 
 
@@ -41,10 +41,18 @@ sub new {
     my $sock = IO::Socket::Multicast->new(
     		Proto => $self->{'proto'},
     		LocalPort => $self->{'port'});
-    return undef unless ($sock);
+    if (!defined $sock) {
+    	warn "Failed to create multicast socket: $!";
+    	return undef;
+    }
+
     
 	# Join the SAP multicast group
-	$sock->mcast_add( $self->{'group'} );
+	if (!$sock->mcast_add( $self->{'group'} ) )
+	{
+		warn "Failed to join multicast group: $!";
+		return undef;
+	}
 
 	
     $self->{'sock'} = $sock;
@@ -67,14 +75,16 @@ sub receive {
 		next unless $self->{'sock'}->recv($data,2048);
 		
 		# Try and parse the packet
-		$sap_packet = $self->parse_sap_packet( $data );
+		$sap_packet = $self->_parse_sap_packet( $data );
 	}
 	
 	return $sap_packet;
 }
 
-
-sub parse_sap_packet {
+#
+# Not intended for consumption outside this module !
+#
+sub _parse_sap_packet {
 	my ($self, $packet) = @_;
 	my $sap= {};
 	my $pos=0;
@@ -97,7 +107,8 @@ sub parse_sap_packet {
  	
 	
  	$sap->{'auth_len'} = $auth_len;
- 	$sap->{'msg_id_hash'} = sprintf("0x%4.4X", $id_hash);
+ 	$sap->{'msg_id_hash'} = sprintf("%6.6d", $id_hash);
+# 	$sap->{'msg_id_hash'} = sprintf("0x%4.4X", $id_hash);
  	
  	if ($sap->{'a'} == 0) {
  		# IPv4 address
@@ -233,8 +244,8 @@ The packet is parsed, decompressed and returned as a hashref:
     		# 1 for session deletion
     'v' => 1,	# SAP Packet format version number
 
-    # Message ID Hash as 16bit hex number
-    'msg_id_hash' => 0x1287,
+    # Message ID Hash as an integer
+    'msg_id_hash' => 1287,
 
     # Length of the authentication data
     'auth_len' => 0,	
@@ -270,7 +281,7 @@ Leave the SAP multicast group and close the socket.
 
 =item Add support for creating and sending packets.
 
-=item Add test script as part of build process
+=item Improve test script
 
 =item Return perl object (Net::SAP::Packet ?) instead of hash ?
 

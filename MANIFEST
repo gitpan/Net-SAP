@@ -1,4 +1,5 @@
-SAP.pm
+lib/Net/SAP.pm
+t/test.t
 Changes
 MANIFEST
 README

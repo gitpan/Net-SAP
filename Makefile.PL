@@ -5,15 +5,16 @@ use ExtUtils::MakeMaker;
 
 WriteMakefile(
 	      NAME	=> 'Net::SAP',
-	      VERSION_FROM => 'SAP.pm', # finds $VERSION
+	      VERSION_FROM => 'lib/Net/SAP.pm', # finds $VERSION
 	      PREREQ_PM => {
 			    'IO::Socket::Multicast' => 0.20,
 			    'Compress::Zlib' => 1.14,
+			    'Test' => 1,
 			   },
 	      LIBS	=> '',		# e.g., '-lm' 
 	      DEFINE	=> '',	# e.g., '-DHAVE_SOMETHING' 
 	      INC	=> '',		# e.g., '-I/usr/include/other' 
 	      
-	      ABSTRACT_FROM	=> 'SAP.pm',	# retrieve abstract from module
+	      ABSTRACT_FROM	=> 'lib/Net/SAP.pm',	# retrieve abstract from module
 	      AUTHOR        => 'Nicholas Humfrey',
 );

@@ -1,5 +1,10 @@
 Revision history for Perl extension Net::SAP.
 
+0.03  Sun Aug 15 16:38:08 2004
+	Changed msg_id_hash to a decimemal integer instead of hex
+	Added test script
+	Better checks when creating multicast socket
+
 0.02  Sun Jul 25 15:47:18 2004
 	Minor Documentation corrections
 
