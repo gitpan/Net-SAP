@@ -14,7 +14,7 @@ use Carp;
 
 use vars qw/$VERSION/;
 
-$VERSION="0.06";
+$VERSION="0.07";
 
 
 
@@ -29,8 +29,8 @@ sub new {
     	't'	=> 0,	# Message Type (0=announce, 1=delete)
     	'e'	=> 0,	# Encryped (0=no, 1=yes)
     	'c'	=> 0,	# Compressed (0=no, 1=yes)
-    	'origin_ip'	=> '',		# No Origin
-    	'msg_id_hash' => 0,		# No Message Hash
+    	'origin_address' => '',   # No Origin
+    	'msg_id_hash' => 0,       # No Message Hash
     	'auth_len'	=> 0,
     	'auth_data'	=> '',
     	'payload_type'	=> 'application/sdp',
@@ -89,10 +89,10 @@ sub parse {
  	# Decide the origin address to a string
  	if ($self->{'a'} == 0) {
  		# IPv4 address
- 		$self->{'origin_ip'} = Net::SAP::_xs_ipaddr_to_str( 'ipv4', substr($data,$pos,4) ); $pos+=4;
+ 		$self->{'origin_address'} = Net::SAP::_xs_ipaddr_to_str( 'ipv4', substr($data,$pos,4) ); $pos+=4;
  	} else {
  		# IPv6 address
- 		$self->{'origin_ip'} = Net::SAP::_xs_ipaddr_to_str( 'ipv6', substr($data,$pos,16) ); $pos+=16;
+ 		$self->{'origin_address'} = Net::SAP::_xs_ipaddr_to_str( 'ipv6', substr($data,$pos,16) ); $pos+=16;
  	}
  	
  	
@@ -228,10 +228,10 @@ sub origin_address {
 	
 	if (defined $value) {
 		## FIXME: should be some checking ?
-		$self->{'origin_ip'} = $value;
+		$self->{'origin_address'} = $value;
 	}
 	
-	return $self->{'origin_ip'};
+	return $self->{'origin_address'};
 }
 
 
@@ -259,17 +259,17 @@ sub type {
 	
 	if (defined $value) {
 		if ($value =~ /advert/i) {
-			$self->{'t'} = 1;
-		} elsif ($value =~ /delet/i) {
 			$self->{'t'} = 0;
+		} elsif ($value =~ /delet/i) {
+			$self->{'t'} = 1;
 		} else {
 			carp "Invalid parameter for type(): $value\n";
 			carp "Should be 'advertisement' or 'deletion'.";
 		}
 	}
 
-	if ($self->{'t'}) 	{ return 'advertisement'; }
-	else				{ return 'deletion'; }
+	if ($self->{'t'} == 0)		{ return 'advertisement'; }
+	else						{ return 'deletion'; }
 }
 
 sub version {

@@ -24,7 +24,7 @@
 #define SAP_BUFFER_SIZE		(2048) 
 
 // for 16bit fnv
-#define MASK_16 (((u_int32_t)1<<16)-1)  /* i.e., (u_int32_t)0xffff */
+#define MASK_16 (((Fnv32_t)1<<16)-1)  /* i.e., (Fnv32_t)0xffff */
 
 
 
@@ -301,7 +301,7 @@ _xs_16bit_hash( data )
   CODE:
 	STRLEN data_len;
 	char * data_ptr;
-	u_int32_t hash;
+	Fnv32_t hash;
 
   	if (data==NULL) XSRETURN_UNDEF;
 	data_ptr = SvPV(data, data_len);
