@@ -1,0 +1,42 @@
+Net-SAP version 0.01
+====================
+
+Net::SAP currently provides basic functionality for receiving and parsing
+SAP (RFC2974) multicast packets.
+
+
+
+
+INSTALLATION
+
+To install this module type the following:
+
+   perl Makefile.PL
+   make
+   make install
+
+
+DEPENDENCIES
+
+This module requires these other modules and libraries:
+
+	IO::Socket::Multicast
+	Compress::Zlib
+
+These are available in Debian as the packages:
+
+	libio-socket-multicast-perl
+	libcompress-zlib-perl
+
+
+COPYRIGHT AND LICENCE
+
+Put the correct copyright and licence information here.
+
+Copyright (C) 2004 University of Southampton
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself, either Perl version 5.005 or,
+at your option, any later version of Perl 5 you may have available.
+
+
