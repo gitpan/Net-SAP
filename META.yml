@@ -1,13 +1,20 @@
-# http://module-build.sourceforge.net/META-spec.html
-#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
-name:         Net-SAP
-version:      0.03
-version_from: lib/Net/SAP.pm
-installdirs:  site
+--- #YAML:1.0
+name: Net-SAP
+version: 0.04
+author:
+  - Nicholas Humfrey, njh@ecs.soton.ac.uk
+abstract: |-
+  Session Announcement Protocol (rfc2974) packet parser
+license: perl
 requires:
-    Compress::Zlib:                1.14
-    IO::Socket::Multicast:         0.2
-    Test:                          1
-
-distribution_type: module
-generated_by: ExtUtils::MakeMaker version 6.17
+  Compress::Zlib: 1.14
+  IO::Socket::Multicast: 0.20
+  Test: 1.00
+  perl: 5.5.0
+build_requires:
+  Module::Build: 0.25
+provides:
+  Net::SAP:
+    file: lib/Net/SAP.pm
+    version: 0.04
+generated_by: Module::Build version 0.25

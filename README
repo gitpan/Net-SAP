@@ -1,4 +1,4 @@
-Net-SAP version 0.03
+Net-SAP version 0.04
 ====================
 
 Net::SAP currently provides basic functionality for receiving and parsing
@@ -9,11 +9,17 @@ SAP (RFC2974) multicast packets.
 
 INSTALLATION
 
+I now use Module::Build to build and install the module.
 To install this module type the following:
 
-   perl Makefile.PL
-   make
-   make install
+   perl Build.PL
+   ./Build
+   ./Build test
+   ./Build install
+
+Module::Build is available in the debian package:
+
+   libmodule-build-perl
 
 
 DEPENDENCIES

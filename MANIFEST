@@ -3,6 +3,6 @@ t/test.t
 Changes
 MANIFEST
 README
-Makefile.PL
+Build.PL
 META.yml
 examples/packet_dumper.pl

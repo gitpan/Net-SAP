@@ -1,5 +1,8 @@
 Revision history for Perl extension Net::SAP.
 
+0.04  Tue Aug 17 13:00:07 2004
+	Changed to the Module::Build system
+
 0.03  Sun Aug 15 16:38:08 2004
 	Changed msg_id_hash to a decimemal integer instead of hex
 	Added test script
