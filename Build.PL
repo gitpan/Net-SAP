@@ -18,6 +18,9 @@ my $build = Module::Build->new
 		'Pod::Usage' => 0,
 		'Data::Dumper' => 0,
 	},
+        recommends => {
+                'Net::SDP' => 0,
+        },
 	include_dirs => [ 'src' ],
 	c_source => 'src',
 );

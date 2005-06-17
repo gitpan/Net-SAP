@@ -21,7 +21,6 @@
  *  
  */
 
-#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -109,21 +108,23 @@ static int
 _get_addrinfo ( const char *host, int port, struct addrinfo *ainfo, struct sockaddr_storage *saddr )
 {
     struct addrinfo hints, *res, *cur;
-    char service[6];
+    char service[NI_MAXSERV];
+    char hostname[NI_MAXHOST];
     int error;
     int retval = -1;
     
     /* Convert port number to a string */
     snprintf( service, sizeof( service ), "%d", port );
+    snprintf( hostname, sizeof( hostname ), "%s", host );
 
 	/* Setup hints for getaddrinfo */
-    memset(&hints, 0, sizeof(struct addrinfo));
+    memset(&hints, 0, sizeof(hints));
     //hints.ai_flags = AI_PASSIVE;
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_DGRAM;
 
-    error = getaddrinfo(host, service, &hints, &res);
-    if (error) {
+    error = getaddrinfo(hostname, service, &hints, &res);
+    if (error || res == NULL) {
         fprintf(stderr, "getaddrinfo failed: %s\n", gai_strerror(error));
         return error;
     }
