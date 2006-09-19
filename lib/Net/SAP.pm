@@ -2,22 +2,22 @@ package Net::SAP;
 
 ################
 #
-# SAP: Session Announcement Protocol (rfc2974)
+# SAP: Session Announcement Protocol (RFC2974)
 #
-# Nicholas Humfrey
-# njh@ecs.soton.ac.uk
+# Nicholas J Humfrey
+# njh@cpan.org
 #
 
 use strict;
-use XSLoader;
 use Carp;
 
 use Net::SAP::Packet;
+use Socket qw/ unpack_sockaddr_in /;
+use Socket6 qw/ inet_ntop inet_pton unpack_sockaddr_in6 /;
+use IO::Socket::Multicast6;
 
-use vars qw/$VERSION $PORT/;
-
-$VERSION="0.09";
-$PORT=9875;
+use vars qw/$VERSION/;
+our $VERSION="0.10";
 
 
 
@@ -34,9 +34,8 @@ my %groups = (
 	'ipv6-org'=>	'FF08::2:7FFE',
 	'ipv6-global'=>	'FF0E::2:7FFE',
 );
-	
 
-XSLoader::load('Net::SAP', $VERSION);
+my $SAP_PORT = 9875;
 
 
 
@@ -55,23 +54,23 @@ sub new {
 	# Store parameters
     my $self = {
     	'group'	=> $group,
-    	'port'	=> $PORT,
-    	'hops'	=> 127,
+    	'port'	=> $SAP_PORT
     };
     
     
-    # Create Multicast Socket using C code
-    $self->{'sock'} = _xs_socket_create(
-    	$self->{'group'},
-    	$self->{'port'},
-    	$self->{'hops'},
-    );
-    return undef unless (defined $self->{'sock'});
-    
-    
-    # Store the Socket family we ended up using
-    $self->{'family'} = _xs_socket_family( $self->{'sock'} );
-    
+    # Create Multicast Socket
+	$self->{'socket'} = new IO::Socket::Multicast6(
+			LocalAddr => $self->{'group'},
+			LocalPort => $SAP_PORT )
+	|| return undef;
+	
+	# Set the TTL for transmitted packets
+	$self->{'socket'}->mcast_ttl( 127 );
+	
+	# Join the multicast group
+	$self->{'socket'}->mcast_add( $self->{'group'} ) ||
+	die "Failed to join multicast group: $!";
+	
 
     bless $self, $class;
 	return $self;
@@ -86,6 +85,24 @@ sub group {
 	return $self->{'group'};
 }
 
+
+#
+# Sets the TTL for packets sent
+#
+sub ttl {
+	my $self = shift;
+	my ($ttl) = @_;
+	
+	# Set new TTL if specified
+	if (defined $ttl) {
+		return undef if ($ttl<0 or $ttl>127);
+		$self->{'socket'}->mcast_ttl($ttl);
+	}
+
+	return $self->{'socket'}->mcast_ttl();
+}
+
+
 #
 # Blocks until a valid SAP packet is received
 #
@@ -96,20 +113,31 @@ sub receive {
 	
 	while(!defined $sap_packet) {
 	
-		# Recieve a packet	
-		my $packet = _xs_socket_recv( $self->{'sock'} );
-		next unless (defined $packet);
-		next unless (exists $packet->{'data'});
+		# Receive a packet
+		my $data = undef;
+		my $from = $self->{'socket'}->recv( $data, 1500 );
+		die "Failed to receive packet: $!" unless (defined $from);
+		next unless (defined $data and length($data));
 		
-		# Create new packet object from the data we recieved
-		$sap_packet = new Net::SAP::Packet( $packet->{'data'} );
+		# Create new packet object from the data we received
+		$sap_packet = new Net::SAP::Packet( $data );
 		next unless (defined $sap_packet);
 		
 		# Correct the origin on Stupid packets !
-		if ($sap_packet->origin_address() eq '0.0.0.0' or
+		if ($sap_packet->origin_address() eq '' or
+		    $sap_packet->origin_address() eq '0.0.0.0' or
 			$sap_packet->origin_address() eq '1.2.3.4' )
 		{
-			$sap_packet->origin_address( $packet->{'from'} );
+			if (sockaddr_family($from)==AF_INET) {
+				my ($from_port, $from_ip) = unpack_sockaddr_in( $from );
+				$from = inet_ntop( AF_INET, $from_ip );
+			} elsif (sockaddr_family($from)==AF_INET6) {
+				my ($from_port, $from_ip) = unpack_sockaddr_in6( $from );
+				$from = inet_ntop( AF_INET6, $from_ip );
+			} else {
+				warn "Unknown address family (family=".sockaddr_family($from).")\n";
+			}
+			$sap_packet->origin_address( $from );
 		}
 	}
 
@@ -136,16 +164,6 @@ sub send {
 		$packet->payload( $data );
 	}
 
-
-	# Set the origin address, if there isn't one set
-	if ($packet->origin_address() eq '') {
-	
-		$packet->origin_address_type( $self->{'family'} );
-	
-		$packet->origin_address( 
-			_xs_origin_addr( $self->{'family'} )
-		);
-	}
 	
 	# Assemble and send the packet
 	my $data = $packet->generate();
@@ -156,7 +174,7 @@ sub send {
 		warn "Packet is more than 1024 bytes, not sending.";
 		return -1;
 	} else {
-		return _xs_socket_send( $self->{'sock'}, $data );
+		return $self->{'socket'}->mcast_send( $data, $self->{'group'}, $self->{'port'} );
 	}
 }
 
@@ -165,16 +183,16 @@ sub close {
 	my $self=shift;
 	
 	# Close the multicast socket
-	_xs_socket_close( $self->{'sock'} );
+	$self->{'socket'}->close();
+	undef $self->{'socket'};
 	
-	undef $self->{'sock'};
 }
 
 
 sub DESTROY {
     my $self=shift;
     
-    if (exists $self->{'sock'} and defined $self->{'sock'}) {
+    if (exists $self->{'socket'} and defined $self->{'socket'}) {
     	$self->close();
     }
 }
@@ -257,6 +275,10 @@ returns 0 if packet was sent successfully.
 Returns the address of the multicast group that the socket is bound to.
 
 
+=item $ttl = $sap->ttl( [$value] )
+
+Gets or sets the TTL of outgoing packets.
+
 =item $sap->close()
 
 Leave the SAP multicast group and close the socket.
@@ -267,15 +289,11 @@ Leave the SAP multicast group and close the socket.
 
 =over
 
-=item add method of choosing the multicast interface to use
+=item add automatic detection of IPv6 origin address
 
-=item ensure that only public v4 addresses are used as origin
+=item add method of choosing the network interface to use for multicast
 
 =item Packet decryption and validation
-
-=item Improve test script ?
-
-=item Move some XS functions to Net::SAP::Packet ?
 
 =back
 
@@ -294,11 +312,11 @@ be notified of progress on your bug as I make changes.
 
 =head1 AUTHOR
 
-Nicholas Humfrey, njh@ecs.soton.ac.uk
+Nicholas J Humfrey, njh@cpan.org
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2004,2005,2006 University of Southampton
+Copyright (C) 2004-2006 University of Southampton
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.005 or,
